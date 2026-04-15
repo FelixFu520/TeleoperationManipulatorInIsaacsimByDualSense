@@ -201,3 +201,7 @@ ln -s /home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac Isaac
 --/persistent/isaac/asset_root/default=/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1
 
 ```
+参考[官方入门教程](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/introduction/quickstart_isaacsim_robot.html)配置Franka机械臂，
+配置好的usd在`assets/franka.usd`
+
+![](docs/images/franka01.gif)
