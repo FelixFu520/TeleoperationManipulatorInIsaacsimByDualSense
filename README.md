@@ -183,3 +183,7 @@ ln -s $HOME/isaac_sim/5.1 app   # 链接isaacsim5.1, 使用isaacsim环境
 ```
 
 ## 使用代码获取DualSence数据
+先安装evdev
+```
+./app/python.sh -m pip install evdev
+```
