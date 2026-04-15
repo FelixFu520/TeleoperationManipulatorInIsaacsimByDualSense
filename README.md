@@ -36,6 +36,12 @@
 <img src="docs/images/wuying.png" width="500" alt="描述文本">
 
 #### 连接
+我的无影电脑内核
+```
+uname -a
+Linux 87ovk2aagvn3r67 5.15.0-125-generic #135-Ubuntu SMP Fri Sep 27 13:53:58 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
+```
+
 首先， 需要为这台无影云电脑配置策略， 可以找管理员或无影的工作人员。
 
 然后，就可以在外设中看到DualSence手柄了，
@@ -74,3 +80,106 @@ evtest
 ![](docs/images/dualsence09.gif)
 
  
+## 安装isaacsim
+在无影中安装isaacsim
+### 安装isaacsim和对应资产
+安装目录建议安装在$HOME目录, isaacsim和资产可以选择一个版本安装，不必全部安装
+
+官方推荐安装到$HOME/isaacsim文件夹下，但是我这个文件已经创建了，我就安装到$HOME/isaac_sim中了
+
+```
+mkdir -p $HOME/isaac_sim
+cd $HOME/isaac_sim
+
+
+# 下载软件和资产
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-standalone-4.5.0-linux-x86_64.zip
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-assets-1-4.5.0.zip
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-assets-2-4.5.0.zip
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-assets-3-4.5.0.zip
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-standalone-5.1.0-linux-x86_64.zip
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-assets-complete-5.1.0.zip.001
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-assets-complete-5.1.0.zip.002
+wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-assets-complete-5.1.0.zip.003
+
+
+# 合并资产
+cat isaac-sim-assets-1-4.5.0.zip  isaac-sim-assets-2-4.5.0.zip isaac-sim-assets-3-4.5.0.zip > isaac-sim-assets-4.5.0.zip
+cat isaac-sim-assets-complete-5.1.0.zip.001 isaac-sim-assets-complete-5.1.0.zip.002 isaac-sim-assets-complete-5.1.0.zip.003 > isaac-sim-assets-5.1.0.zip
+
+
+# 解压
+unzip -d 4.5/ isaac-sim-standalone-4.5.0-linux-x86_64.zip
+unzip -d 5.1/ isaac-sim-standalone-5.1.0-linux-x86_64.zip
+unzip -d 4.5_asset isaac-sim-assets-4.5.0.zip
+unzip -d 5.1_asset isaac-sim-assets-5.1.0.zip
+
+
+# git管理, 有时候会误修改isaacsim软件中代码，所以用git管理下，如果有变化，可以及时发现
+cd $HOME/isaac_sim/4.5/
+git init
+git add .
+git commit -m "init"
+
+cd $HOME/isaac_sim/4.5_asset/
+git init
+git add .
+git commit -m "init"
+
+cd $HOME/isaac_sim/5.1/
+git init
+git add .
+git commit -m "init"
+
+cd $HOME/isaac_sim/5.1_asset/
+git init
+git add .
+git commit -m "init"
+
+```
+### 配置isaacsim默认资产
+isaacsim资产可以从网络和本地加载，上一步已经下载了资产，现在配置下，让isaacsim可以识别到
+#### 5.1 配置
+参考：https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/install_faq.html
+
+编辑apps/isaacsim.exp.base.kit文件，根据自身情况修改
+
+```
+[settings]
+persistent.isaac.asset_root.default = "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1"
+
+exts."isaacsim.gui.content_browser".folders = [
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Robots",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/People",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/IsaacLab",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Props",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Environments",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Materials",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Samples",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Sensors",
+]
+
+exts."isaacsim.asset.browser".folders = [
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Robots",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/People",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/IsaacLab",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Props",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Environments",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Materials",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Samples",
+    "/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac/Sensors",
+]
+
+```
+
+## 安装本项目
+```
+cd $HOME
+git clone git@github.com:FelixFu520/TeleoperationManipulatorInIsaacsimByDualSense.git
+cd $HOME/TeleoperationManipulatorInIsaacsimByDualSense
+
+# 链接isaacsim, 我这里链接的是isaacsim5.1，可以根据需要选择不同的版本
+ln -s $HOME/isaac_sim/5.1 app   # 链接isaacsim5.1, 使用isaacsim环境
+```
+
+## 使用代码获取DualSence数据
