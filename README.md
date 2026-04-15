@@ -186,4 +186,7 @@ ln -s $HOME/isaac_sim/5.1 app   # 链接isaacsim5.1, 使用isaacsim环境
 先安装evdev
 ```
 ./app/python.sh -m pip install evdev
+
+sudo ./app/python.sh tools/show_dualsense.py --device /dev/input/event6
 ```
+![](docs/images/dualsence10.gif)
