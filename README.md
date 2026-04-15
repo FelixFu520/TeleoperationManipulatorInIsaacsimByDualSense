@@ -193,6 +193,9 @@ sudo ./app/python.sh tools/show_dualsense.py --device /dev/input/event6
 
 ## 在Isaacsim中操作机械臂
 ```
+cd asset
+ln -s /home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac Isaac
+
 启动Isaacsim
 ./app/isaac-sim.sh \
 --/persistent/isaac/asset_root/default=/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1
