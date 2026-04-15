@@ -190,3 +190,11 @@ ln -s $HOME/isaac_sim/5.1 app   # 链接isaacsim5.1, 使用isaacsim环境
 sudo ./app/python.sh tools/show_dualsense.py --device /dev/input/event6
 ```
 ![](docs/images/dualsence10.gif)
+
+## 在Isaacsim中操作机械臂
+```
+启动Isaacsim
+./app/isaac-sim.sh \
+--/persistent/isaac/asset_root/default=/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1
+
+```
