@@ -207,6 +207,24 @@ ln -s /home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1/Isaac Isaac
 ![](docs/images/franka01.gif)
 
 ## 通过ROS控制Isaacsim中的Graph
+Isaacsim如何和ROS配合呢？
+
+Isaacsim中独立装了一套ROS， 需要在主机上再装个ROS， 需要保证两个ros系统`ROS_DOMAIN_ID`一致，通过主机上的ROS来控制仿真中的ROS，
+仿真中通过ActionGraph直接调用ROS官方的API
+
+首先，在主机上安装ROS2，参考[官方文档](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/install_ros.html)
+
+然后，通过ROS2[入门示例](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/ros2_tutorials/tutorial_ros2_clock.html)对其有初步的了解
+
+在这里只需要定义一个Subscriber就行， `assets/clock.usd`文件是我做好的资产， 然后按照下面的方式运行即可以验证通过主机上ROS控制Isaacsim
+中的Omniraph
+
+```
+ros2 topic pub  -t 1 /clock rosgraph_msgs/Clock "clock: { sec: 1, nanosec: 200000000 }"
+
+ros2 topic pub  -t 1 /clock rosgraph_msgs/Clock "clock: { sec: 40, nanosec: 200000000 }"
+```
+![](docs/images/clock01.gif)
 
 ## DualSense在Isaacsim中采集数据
 通过Franka的末端控制整个机械臂, 末端位置有(x,y,z)，(roll, pitch, yaw) 6个数字，然后通过
