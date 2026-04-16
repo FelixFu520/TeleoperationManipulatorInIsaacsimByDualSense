@@ -226,6 +226,10 @@ ros2 topic pub  -t 1 /clock rosgraph_msgs/Clock "clock: { sec: 40, nanosec: 2000
 ```
 ![](docs/images/clock01.gif)
 
+## 逆运动学（Inverse Kinematics, IK）
+我们想通过控制机械臂的末端来控制机械臂所有关节， 这时候需要IK来反求出所有机械臂的关节数值
+
+
 ## DualSense在Isaacsim中采集数据
 通过Franka的末端控制整个机械臂, 末端位置有(x,y,z)，(roll, pitch, yaw) 6个数字，然后通过
 - `左摇杆`控制x,y。 左右默认值127，最左0， 最右255； 上下默认值127， 最下255，最上0
