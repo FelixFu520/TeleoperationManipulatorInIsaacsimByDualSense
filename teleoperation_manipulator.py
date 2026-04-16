@@ -305,6 +305,18 @@ class DualSenseReader:
     def r2_analog(self) -> int:
         return self.get(ecodes.EV_ABS, ecodes.ABS_RZ)
 
+    @property
+    def btn_triangle(self) -> bool:
+        return self.get(ecodes.EV_KEY, ecodes.BTN_NORTH) == 1
+
+    @property
+    def btn_cross(self) -> bool:
+        return self.get(ecodes.EV_KEY, ecodes.BTN_SOUTH) == 1
+
+    @property
+    def dpad_y(self) -> int:
+        return self.get(ecodes.EV_ABS, ecodes.ABS_HAT0Y)
+
     def stop(self) -> None:
         self._running = False
         self._thread.join(timeout=1.0)
@@ -331,39 +343,41 @@ def compute_target_delta(
 ) -> tuple[float, float, float, float, float, float, float]:
     """根据手柄状态计算末端位姿增量和夹爪值。
 
-    映射规则 (README 330-335):
-        左摇杆         -> x, y
-        L3 + 左摇杆    -> z (仅上下)
-        右摇杆         -> roll, pitch
-        L3 + 右摇杆    -> yaw (仅左右)
-        R2             -> 夹爪
-
-    摇杆方向约定:
-        左右: 默认127, 最左0, 最右255
-        上下: 默认127, 最下255, 最上0
+    映射规则 (README 331-339):
+        左摇杆 左右      -> y
+        左摇杆 上下      -> x (上=前进x增大)
+        △ (三角键)      -> z 持续上升
+        X (交叉键)      -> z 持续下降
+        右摇杆 左右      -> roll
+        右摇杆 上下      -> pitch
+        方向键 上        -> yaw 持续增大
+        方向键 下        -> yaw 持续减小
+        R2              -> 夹爪 (0=开, 255=关)
     """
-    l3 = reader.l3_pressed
     lx = stick_to_delta(reader.left_stick_x)
     ly = stick_to_delta(reader.left_stick_y)
     rx = stick_to_delta(reader.right_stick_x)
     ry = stick_to_delta(reader.right_stick_y)
 
-    dx = dy = dz = 0.0
-    droll = dpitch = dyaw = 0.0
+    dx = -ly * sensitivity_pos            # 左摇杆上下 -> x (上=ly<0 -> x增大)
+    dy = lx * sensitivity_pos             # 左摇杆左右 -> y (右=lx>0 -> y增大)
 
-    if l3:
-        # L3 按下: 左摇杆上下 -> z, 右摇杆左右 -> yaw
-        dz = -ly * sensitivity_pos       # 上(ly<0) -> z增大
-        dyaw = rx * sensitivity_ori
-    else:
-        # 普通: 左摇杆 -> x,y; 右摇杆 -> roll,pitch
-        dx = lx * sensitivity_pos         # 右 -> x增大
-        dy = -ly * sensitivity_pos        # 上 -> y增大
-        droll = rx * sensitivity_ori      # 右 -> roll增大
-        dpitch = -ry * sensitivity_ori    # 上 -> pitch增大
+    dz = 0.0
+    if reader.btn_triangle:               # △ -> z上升
+        dz = sensitivity_pos
+    elif reader.btn_cross:                # X -> z下降
+        dz = -sensitivity_pos
+
+    droll = rx * sensitivity_ori          # 右 -> roll增大
+    dpitch = -ry * sensitivity_ori        # 上(ry<0) -> pitch增大
+
+    dyaw = 0.0
+    dpad = reader.dpad_y                  # 方向键上=-1, 下=1
+    if dpad != 0:
+        dyaw = -dpad * sensitivity_ori    # 上(-1) -> yaw增大
 
     gripper_ratio = reader.r2_analog / 255.0
-    gripper = gripper_ratio * GRIPPER_MAX
+    gripper = (1.0 - gripper_ratio) * GRIPPER_MAX  # R2=0 -> 开(max), R2=255 -> 关(0)
 
     return dx, dy, dz, droll, dpitch, dyaw, gripper
 
@@ -467,12 +481,16 @@ def main() -> None:
 
     print("=" * 60)
     print("操控映射:")
-    print("  左摇杆          -> x, y")
-    print("  L3 + 左摇杆(上下) -> z")
-    print("  右摇杆          -> roll, pitch")
-    print("  L3 + 右摇杆(左右) -> yaw")
-    print("  R2              -> 夹爪")
-    print("  Ctrl+C          -> 退出")
+    print("  左摇杆 上下       -> x (上=前进)")
+    print("  左摇杆 左右       -> y (右=右移)")
+    print("  △ (三角键)       -> z 上升")
+    print("  X (交叉键)       -> z 下降")
+    print("  右摇杆 左右       -> roll")
+    print("  右摇杆 上下       -> pitch")
+    print("  方向键 上         -> yaw 增大")
+    print("  方向键 下         -> yaw 减小")
+    print("  R2               -> 夹爪 (松开=开, 按下=关)")
+    print("  Ctrl+C           -> 退出")
     print("=" * 60)
 
     cur_x, cur_y, cur_z = float(fk_pos[0]), float(fk_pos[1]), float(fk_pos[2])
@@ -480,7 +498,7 @@ def main() -> None:
     last_x, last_y, last_z = cur_x, cur_y, cur_z
     last_roll, last_pitch, last_yaw = cur_roll, cur_pitch, cur_yaw
     last_q = DEFAULT_Q.copy()
-    gripper = 0.0
+    gripper = GRIPPER_MAX
     period = 1.0 / args.rate
 
     ik_fail_count = 0
@@ -526,13 +544,14 @@ def main() -> None:
         if publisher is not None:
             publish_joint_command(node, publisher, JointState, last_q, gripper)
 
-        status = "OK" if success else f"IK FAIL({ik_fail_count})"
+        ik_ms = (time.monotonic() - t0) * 1000
+        status = "OK" if success else f"FAIL({ik_fail_count})"
         sys.stdout.write(
-            f"\r[{status}] "
+            f"\r[{status} {ik_ms:4.0f}ms] "
             f"pos=({cur_x:.3f},{cur_y:.3f},{cur_z:.3f}) "
             f"rpy=({cur_roll:.2f},{cur_pitch:.2f},{cur_yaw:.2f}) "
             f"grip={gripper:.3f} "
-            f"q=[{', '.join(f'{q:.2f}' for q in last_q)}]"
+            f"d=({dx:.4f},{dy:.4f},{dz:.4f},{droll:.3f},{dpitch:.3f},{dyaw:.3f})"
             f"    "
         )
         sys.stdout.flush()
