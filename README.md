@@ -339,4 +339,37 @@ ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
 pip install pin pin-pink daqp -i https://pypi.tuna.tsinghua.edu.cn/simple
 pip install evdev -i https://pypi.tuna.tsinghua.edu.cn/simple
 
+
+source /opt/ros/humble/setup.bash
+sudo -E $(which python) teleoperation_manipulator.py --device /dev/input/event6
+
+source /opt/ros/humble/setup.bash
+sudo bash -c "source /opt/ros/humble/setup.bash && $(which python) /home/fufa/projects2026/TeleoperationManipulatorInIsaacsimByDualSense/teleoperation_manipulator.py --device /dev/input/event6"
+
+# 给当前用户加 input 组权限 (一次性设置)
+sudo usermod -aG input $USER
+# 或者直接改设备权限
+sudo chmod a+r /dev/input/event6
+
+# 然后无需 sudo 直接运行
+source /opt/ros/humble/setup.bash
+python teleoperation_manipulator.py --device /dev/input/event6
+
+
+设备属于 input 组，但你的用户不在 input 组中。两种方式解决：
+
+方式 1（推荐，永久生效）：把用户加入 input 组
+
+sudo usermod -aG input fufa
+加完后需要重新登录才生效。如果不想重新登录，可以用方式 2 临时解决。
+
+方式 2（临时，立即生效）：直接改设备权限
+
+sudo chmod a+r /dev/input/event6
+执行方式 2 后，就可以不用 sudo 直接运行了：
+
+source /opt/ros/humble/setup.bash
+conda activate tele
+python teleoperation_manipulator.py --device /dev/input/event6
+这样 ROS2 的所有环境变量都会正确保留，IsaacSim 就能收到消息了。
 ```
