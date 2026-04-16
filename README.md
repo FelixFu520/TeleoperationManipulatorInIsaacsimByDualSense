@@ -333,3 +333,10 @@ ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
 - `右摇杆`控制roll,pitch。 左右默认值127，最左0， 最右255； 上下默认值127， 最下255，最上0
 - `L3+右摇杆`控制yaw。左右默认值127，最左0， 最右255(左右不使用)； 上下默认值127， 最下255，最上0
 - `R2`控制夹爪。 默认值0，按到底255
+
+```
+
+pip install pin pin-pink daqp -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install evdev -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+```

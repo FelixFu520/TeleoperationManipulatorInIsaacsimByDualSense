@@ -1304,6 +1304,7 @@
         "exts/isaacsim.replicator.omniocc_mobility_gen",
         "exts/isaacsim.replicator.omniocc_mobility_gen.examples",
         "exts/isaacsim.replicator.omniocc_mobility_gen.ui",
+        "/home/fufa/miniconda3/envs/tele/lib/python3.10/site-packages/cmeel.prefix/lib/python3.10/site-packages/"
     ],
     "basedpyright.analysis.extraPaths": [
         "app/exts/isaacsim.app.about",
