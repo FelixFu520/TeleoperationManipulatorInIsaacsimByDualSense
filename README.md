@@ -187,7 +187,7 @@ ln -s $HOME/isaac_sim/5.1 app   # 链接isaacsim5.1, 使用isaacsim环境
 ```
 ./app/python.sh -m pip install evdev
 
-sudo ./app/python.sh tools/show_dualsense.py --device /dev/input/event6
+sudo ./app/python.sh tools/dualsense.py --device /dev/input/event6
 ```
 ![](docs/images/dualsence10.gif)
 
@@ -220,15 +220,111 @@ Isaacsim中独立装了一套ROS， 需要在主机上再装个ROS， 需要保�
 中的Omniraph
 
 ```
+source /opt/ros/humble/setup.sh
+
 ros2 topic pub  -t 1 /clock rosgraph_msgs/Clock "clock: { sec: 1, nanosec: 200000000 }"
 
 ros2 topic pub  -t 1 /clock rosgraph_msgs/Clock "clock: { sec: 40, nanosec: 200000000 }"
 ```
 ![](docs/images/clock01.gif)
 
+
+上面clock例子只是入门， 现在要用主机上的ros2来控制上一步做好的franka机械臂`assets/franka.usd`, 需要修改`franka.usd`文件并保存为
+`franka01.usd`, 下面是控制过程的演示
+![](docs/images/control_franka.gif)
+```
+source /opt/ros/humble/setup.sh
+
+# 复位
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.0, 0.0, -0.5, 0.0, -1.5, 0.0, 1.0, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_finger_joint1
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.0, -0.5, 0.0, -1.5, 0.0, 1.0, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_joint1
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.5, -0.5, 0.0, -1.5, 0.0, 1.0, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_joint2
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.5, 0.0, 0.0, -1.5, 0.0, 1.0, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_joint3
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.5, 0.0, 0.5, -1.5, 0.0, 1.0, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_joint4
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.5, 0.0, 0.5, -0.5, 0.0, 1.0, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_joint5
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.5, 0.0, 0.5, -0.5, 0.5, 1.0, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_joint6
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.5, 0.0, 0.5, -0.5, 0.5, 0.5, 0.785],
+  velocity: [],
+  effort: []
+}"
+
+# panda_joint7
+ros2 topic pub /joint_command sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['panda_finger_joint1', 'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7'],
+  position: [0.4, 0.5, 0.0, 0.5, -0.5, 0.5, 0.5, 0.0],
+  velocity: [],
+  effort: []
+}"
+
+```
+
+
 ## 逆运动学（Inverse Kinematics, IK）
 我们想通过控制机械臂的末端来控制机械臂所有关节， 这时候需要IK来反求出所有机械臂的关节数值
 
+```
+./app/python.sh tools/franka_ik.py --x 0.4 --y 0.0 --z 0.5 --roll 0 --pitch 3.14 --yaw 0
+```
 
 ## DualSense在Isaacsim中采集数据
 通过Franka的末端控制整个机械臂, 末端位置有(x,y,z)，(roll, pitch, yaw) 6个数字，然后通过

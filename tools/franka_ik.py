@@ -5,9 +5,9 @@
 使用 Lula IK 求解器反算出 Franka 7 个关节的角度值。
 
 运行方式:
-    ./app/python.sh tools/test_ik.py
-    ./app/python.sh tools/test_ik.py --x 0.4 --y 0.0 --z 0.5 --roll 0 --pitch 3.14 --yaw 0
-    ./app/python.sh tools/test_ik.py --interactive
+    ./app/python.sh tools/franka_ik.py
+    ./app/python.sh tools/franka_ik.py --x 0.4 --y 0.0 --z 0.5 --roll 0 --pitch 3.14 --yaw 0
+    ./app/python.sh tools/franka_ik.py --interactive
 """
 
 from __future__ import annotations
