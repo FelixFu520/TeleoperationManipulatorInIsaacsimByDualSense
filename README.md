@@ -386,6 +386,7 @@ python tools/franka_ik_noisaacsim.py --x 0.4 --y 0.0 --z 0.5 --roll 0 --pitch 3.
 把`assets/franka02.usd`拖进isaacsim中
 ``` 
 ![](docs/images/isaacsim.gif)
+
 ### 3. 发送控制信号
 ```
 source /opt/ros/humble/setup.bash
