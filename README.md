@@ -379,7 +379,13 @@ python tools/franka_ik_noisaacsim.py --x 0.4 --y 0.0 --z 0.5 --roll 0 --pitch 3.
 - `R2`控制夹爪。 默认值0， 对应夹爪开，按到底255，对应夹爪关
 
 ### 2. play isaacsim场景
+```
+./app/isaac-sim.sh \
+--/persistent/isaac/asset_root/default=/home/fufa/isaac_sim/5.1_asset/Assets/Isaac/5.1
 
+把`assets/franka02.usd`拖进isaacsim中
+``` 
+![](docs/images/isaacsim.gif)
 ### 3. 发送控制信号
 ```
 source /opt/ros/humble/setup.bash
@@ -389,3 +395,4 @@ sudo chmod a+r /dev/input/event6  # /dev名称可能有变化
 conda activate tele
 python teleoperation_manipulator.py --device /dev/input/event6
 ```
+![](docs/images/demo.gif)
