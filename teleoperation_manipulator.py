@@ -39,17 +39,16 @@ DEFAULT_Q = np.array([0.00, -1.3, 0.00, -2.87, 0.00, 2.00, 0.75])
 EE_FRAME = "panda_hand"
 LOCK_JOINTS = ["panda_finger_joint1", "panda_finger_joint2"]
 
-# 末端位姿工作空间范围 (粗略, 用于摇杆映射)
+# 末端位姿工作空间范围 (世界坐标系下的安全边界)
+# 注意 z 下限 > 0 避免撞到桌面/基座
 POS_RANGE = {
-    "x": (0.1, 0.8),
-    "y": (-0.5, 0.5),
-    "z": (0.05, 0.8),
+    "x": (0.15, 0.75),
+    "y": (-0.55, 0.55),
+    "z": (0.10, 0.90),
 }
-ORI_RANGE = {
-    "roll": (-np.pi, np.pi),
-    "pitch": (-np.pi, np.pi),
-    "yaw": (-np.pi, np.pi),
-}
+# Franka 基座到末端的可达球壳 (用于 IK 前的粗筛)
+REACH_MIN = 0.18
+REACH_MAX = 0.85
 
 STICK_CENTER = 127
 STICK_DEADZONE = 10
@@ -136,17 +135,24 @@ class FrankaIKSolver:
         self._ee_frame = ee_frame
         self._ee_frame_id = self._model.getFrameId(ee_frame)
 
-        self._dt = 0.01
-        self._max_iters = 300
+        self._dt = 0.02
+        self._max_iters = 60
         self._pos_threshold = 0.005
         self._ori_threshold = 0.05
+        # 早停: 连续若干次误差不再下降就认为收敛/卡住
+        self._stall_tolerance = 1e-5
+        self._stall_patience = 8
 
+        # 增大 lm_damping 让接近奇异时更稳 (代价: 收敛稍慢, 但更不易发散)
         self._ee_task = FrameTask(
-            ee_frame, position_cost=1.0, orientation_cost=1.0, lm_damping=0.001,
+            ee_frame, position_cost=1.0, orientation_cost=1.0, lm_damping=0.01,
         )
-        self._damping_task = DampingTask(cost=0.01)
+        self._damping_task = DampingTask(cost=0.05)
         self._low_acc_task = LowAccelerationTask(cost=0.01)
-        self._posture_task = PostureTask(cost=0.0)
+        # 给姿态任务一个弱拉向 DEFAULT_Q 的姿态约束,
+        # 避免长时间漂移到关节极限附近
+        self._posture_task = PostureTask(cost=0.005)
+        self._posture_task.set_target(DEFAULT_Q.astype(np.float64))
 
         self._config_limit = ConfigurationLimit(self._model)
         self._velocity_limit = VelocityLimit(self._model)
@@ -176,6 +182,12 @@ class FrankaIKSolver:
         target_rot_matrix: np.ndarray,
         warm_start: np.ndarray | None = None,
     ) -> tuple[np.ndarray, bool]:
+        # 可达性粗筛: 目标离基座太近或太远直接放弃, 省得陷入奇异
+        reach = float(np.linalg.norm(target_position))
+        if reach < REACH_MIN or reach > REACH_MAX:
+            q0 = (warm_start if warm_start is not None else DEFAULT_Q).astype(np.float64)
+            return q0[:self._model.nq].copy(), False
+
         target_se3 = pin.SE3(
             target_rot_matrix.astype(np.float64),
             target_position.astype(np.float64),
@@ -187,11 +199,14 @@ class FrankaIKSolver:
             current_q = current_q[:self._model.nq]
 
         configuration = pink.Configuration(self._model, self._data, current_q)
-        tasks = [self._ee_task, self._damping_task, self._low_acc_task]
+        tasks = [self._ee_task, self._damping_task, self._low_acc_task, self._posture_task]
         limits = [self._config_limit, self._velocity_limit]
 
         best_q = current_q.copy()
         best_pos_err = float("inf")
+        best_ori_err = float("inf")
+        prev_err = float("inf")
+        stall_count = 0
 
         for _ in range(self._max_iters):
             try:
@@ -207,16 +222,31 @@ class FrankaIKSolver:
             fk_pos, fk_rot = self.forward_kinematics(current_q)
             pos_err = np.linalg.norm(fk_pos - target_position)
             rot_err_mat = target_rot_matrix.T @ fk_rot
-            ori_err = np.linalg.norm(pin.log3(rot_err_mat))
+            ori_err = float(np.linalg.norm(pin.log3(rot_err_mat)))
 
-            if pos_err < best_pos_err:
+            total_err = pos_err + 0.1 * ori_err
+            if total_err < best_pos_err + 0.1 * best_ori_err:
                 best_pos_err = pos_err
+                best_ori_err = ori_err
                 best_q = current_q.copy()
 
             if pos_err < self._pos_threshold and ori_err < self._ori_threshold:
                 return current_q, True
 
-        return best_q, (best_pos_err < self._pos_threshold)
+            # 误差不再下降 -> 陷入局部最优, 提前结束省时间
+            if abs(prev_err - total_err) < self._stall_tolerance:
+                stall_count += 1
+                if stall_count >= self._stall_patience:
+                    break
+            else:
+                stall_count = 0
+            prev_err = total_err
+
+        success = (
+            best_pos_err < self._pos_threshold
+            and best_ori_err < self._ori_threshold
+        )
+        return best_q, success
 
     def solve_ik_from_euler(
         self, x: float, y: float, z: float,
@@ -343,15 +373,18 @@ def compute_target_delta(
 ) -> tuple[float, float, float, float, float, float, float]:
     """根据手柄状态计算末端位姿增量和夹爪值。
 
-    映射规则 (README 331-339):
-        左摇杆 左右      -> y
-        左摇杆 上下      -> x (上=前进x增大)
-        △ (三角键)      -> z 持续上升
-        X (交叉键)      -> z 持续下降
-        右摇杆 左右      -> roll
-        右摇杆 上下      -> pitch
-        方向键 上        -> yaw 持续增大
-        方向键 下        -> yaw 持续减小
+    返回的 (dx,dy,dz) 与 (droll,dpitch,dyaw) 都定义在末端局部坐标系中,
+    由主循环再叠加到世界坐标系下的末端位姿上。
+
+    映射规则:
+        左摇杆 左右      -> 末端 y 轴平移
+        左摇杆 上下      -> 末端 x 轴平移 (上=沿末端x正向)
+        △ (三角键)      -> 末端 z 轴正向平移
+        X (交叉键)      -> 末端 z 轴负向平移
+        右摇杆 左右      -> 绕末端 x 轴旋转 (roll)
+        右摇杆 上下      -> 绕末端 y 轴旋转 (pitch)
+        方向键 上        -> 绕末端 z 轴旋转 (yaw 增大)
+        方向键 下        -> 绕末端 z 轴旋转 (yaw 减小)
         R2              -> 夹爪 (0=开, 255=关)
     """
     lx = stick_to_delta(reader.left_stick_x)
@@ -362,11 +395,13 @@ def compute_target_delta(
     dx = -ly * sensitivity_pos            # 左摇杆上下 -> x (上=ly<0 -> x增大)
     dy = lx * sensitivity_pos             # 左摇杆左右 -> y (右=lx>0 -> y增大)
 
+    # 末端 panda_hand 的 +z 朝向夹爪外侧 (一般朝下), 因此 △ 取负、X 取正,
+    # 这样在世界系视觉上 △=向上抬, X=向下压, 与按键直觉一致
     dz = 0.0
-    if reader.btn_triangle:               # △ -> z上升
-        dz = sensitivity_pos
-    elif reader.btn_cross:                # X -> z下降
+    if reader.btn_triangle:               # △ -> 沿末端 -z (世界视觉上向上)
         dz = -sensitivity_pos
+    elif reader.btn_cross:                # X -> 沿末端 +z (世界视觉上向下)
+        dz = sensitivity_pos
 
     droll = rx * sensitivity_ori          # 右 -> roll增大
     dpitch = -ry * sensitivity_ori        # 上(ry<0) -> pitch增大
@@ -480,29 +515,28 @@ def main() -> None:
     print("DualSense 已连接, 开始遥操控制!")
 
     print("=" * 60)
-    print("操控映射:")
-    print("  左摇杆 上下       -> x (上=前进)")
-    print("  左摇杆 左右       -> y (右=右移)")
-    print("  △ (三角键)       -> z 上升")
-    print("  X (交叉键)       -> z 下降")
-    print("  右摇杆 左右       -> roll")
-    print("  右摇杆 上下       -> pitch")
-    print("  方向键 上         -> yaw 增大")
-    print("  方向键 下         -> yaw 减小")
+    print("操控映射 (末端局部坐标系):")
+    print("  左摇杆 上下       -> 末端 x 轴平移 (上=沿末端x正向)")
+    print("  左摇杆 左右       -> 末端 y 轴平移 (右=沿末端y正向)")
+    print("  △ (三角键)       -> 末端 z 轴正向平移")
+    print("  X (交叉键)       -> 末端 z 轴负向平移")
+    print("  右摇杆 左右       -> 绕末端 x 轴旋转 (roll)")
+    print("  右摇杆 上下       -> 绕末端 y 轴旋转 (pitch)")
+    print("  方向键 上         -> 绕末端 z 轴旋转 (yaw 增大)")
+    print("  方向键 下         -> 绕末端 z 轴旋转 (yaw 减小)")
     print("  R2               -> 夹爪 (松开=开, 按下=关)")
     print("  Ctrl+C           -> 退出")
     print("=" * 60)
 
-    cur_x, cur_y, cur_z = float(fk_pos[0]), float(fk_pos[1]), float(fk_pos[2])
-    cur_roll, cur_pitch, cur_yaw = fk_rpy
-    last_x, last_y, last_z = cur_x, cur_y, cur_z
-    last_roll, last_pitch, last_yaw = cur_roll, cur_pitch, cur_yaw
+    # 末端在世界坐标系中的位姿 (位置 + 旋转矩阵), 用矩阵避免欧拉角奇异
+    # cur_pos / cur_rot 保存 "上一次 IK 成功的可行位姿"
+    cur_pos = np.array([fk_pos[0], fk_pos[1], fk_pos[2]], dtype=np.float64)
+    cur_rot = fk_rot.astype(np.float64).copy()
     last_q = DEFAULT_Q.copy()
     gripper = GRIPPER_MAX
     period = 1.0 / args.rate
 
-    ik_fail_count = 0
-    ik_fail_max_rollback = 5
+    ik_fail_streak = 0
 
     # 启动时先发一次初始关节角, 确认 ROS2 通信正常
     if publisher is not None:
@@ -517,41 +551,49 @@ def main() -> None:
             ds, args.sensitivity_pos, args.sensitivity_ori,
         )
 
-        cur_x = np.clip(cur_x + dx, *POS_RANGE["x"])
-        cur_y = np.clip(cur_y + dy, *POS_RANGE["y"])
-        cur_z = np.clip(cur_z + dz, *POS_RANGE["z"])
-        cur_roll = np.clip(cur_roll + droll, *ORI_RANGE["roll"])
-        cur_pitch = np.clip(cur_pitch + dpitch, *ORI_RANGE["pitch"])
-        cur_yaw = np.clip(cur_yaw + dyaw, *ORI_RANGE["yaw"])
+        # 候选目标 = 当前可行位姿 + 本帧末端局部增量
+        # (不直接修改 cur_pos/cur_rot, 失败时整帧丢弃, 不会漂移)
+        local_translation = np.array([dx, dy, dz], dtype=np.float64)
+        cand_pos = cur_pos + cur_rot @ local_translation
+        cand_pos[0] = np.clip(cand_pos[0], *POS_RANGE["x"])
+        cand_pos[1] = np.clip(cand_pos[1], *POS_RANGE["y"])
+        cand_pos[2] = np.clip(cand_pos[2], *POS_RANGE["z"])
+        cand_rot = cur_rot @ euler_to_rot_matrix(droll, dpitch, dyaw)
 
-        joint_positions, success = solver.solve_ik_from_euler(
-            cur_x, cur_y, cur_z, cur_roll, cur_pitch, cur_yaw,
-            warm_start=last_q,
+        has_motion = (
+            abs(dx) + abs(dy) + abs(dz) + abs(droll) + abs(dpitch) + abs(dyaw) > 1e-9
         )
+
+        if has_motion:
+            joint_positions, success = solver.solve_ik(
+                cand_pos, cand_rot, warm_start=last_q,
+            )
+        else:
+            # 无操作时不必再跑 IK, 保持上一帧关节角
+            joint_positions, success = last_q, True
 
         if success:
             last_q = joint_positions.copy()
-            last_x, last_y, last_z = cur_x, cur_y, cur_z
-            last_roll, last_pitch, last_yaw = cur_roll, cur_pitch, cur_yaw
-            ik_fail_count = 0
+            cur_pos = cand_pos
+            cur_rot = cand_rot
+            ik_fail_streak = 0
         else:
-            ik_fail_count += 1
-            if ik_fail_count >= ik_fail_max_rollback:
-                cur_x, cur_y, cur_z = last_x, last_y, last_z
-                cur_roll, cur_pitch, cur_yaw = last_roll, last_pitch, last_yaw
-                ik_fail_count = 0
+            # 候选目标不可达: 丢弃本帧增量, 保留上一次成功位姿
+            # 避免目标漂到不可达区域后越陷越深
+            ik_fail_streak += 1
 
         if publisher is not None:
             publish_joint_command(node, publisher, JointState, last_q, gripper)
 
         ik_ms = (time.monotonic() - t0) * 1000
-        status = "OK" if success else f"FAIL({ik_fail_count})"
+        status = "OK" if success else f"FAIL({ik_fail_streak})"
+        cur_rpy = rot_matrix_to_euler(cur_rot)
         sys.stdout.write(
             f"\r[{status} {ik_ms:4.0f}ms] "
-            f"pos=({cur_x:.3f},{cur_y:.3f},{cur_z:.3f}) "
-            f"rpy=({cur_roll:.2f},{cur_pitch:.2f},{cur_yaw:.2f}) "
+            f"pos=({cur_pos[0]:.3f},{cur_pos[1]:.3f},{cur_pos[2]:.3f}) "
+            f"rpy=({cur_rpy[0]:.2f},{cur_rpy[1]:.2f},{cur_rpy[2]:.2f}) "
             f"grip={gripper:.3f} "
-            f"d=({dx:.4f},{dy:.4f},{dz:.4f},{droll:.3f},{dpitch:.3f},{dyaw:.3f})"
+            f"d_local=({dx:.4f},{dy:.4f},{dz:.4f},{droll:.3f},{dpitch:.3f},{dyaw:.3f})"
             f"    "
         )
         sys.stdout.flush()
