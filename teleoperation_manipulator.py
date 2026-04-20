@@ -403,7 +403,7 @@ def compute_target_delta(
     elif reader.btn_cross:                # X -> 沿末端 +z (世界视觉上向下)
         dz = sensitivity_pos
 
-    droll = rx * sensitivity_ori          # 右 -> roll增大
+    droll = -rx * sensitivity_ori         # 左 -> roll增大 (右摇杆左右方向翻转)
     dpitch = -ry * sensitivity_ori        # 上(ry<0) -> pitch增大
 
     dyaw = 0.0
